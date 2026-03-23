@@ -559,44 +559,53 @@ function initComputerApp() {
     localStorage.setItem('anthropic_key', document.getElementById('api-key').value);
   });
 
-  // Peer.js voor telefoonkoppeling
-  initPeer();
-
-  // QR code genereren
-  generateQR();
+  // Peer.js apart laden — fouten mogen de rest NIET blokkeren
+  setTimeout(() => {
+    try { initPeer(); } catch(e) {
+      document.getElementById('peer-id-display').textContent = 'niet beschikbaar';
+    }
+    try { generateQR(); } catch(e) {}
+  }, 500);
 }
 
 // ─────────────────────────────────────────────
 // PEER.JS KOPPELING
 // ─────────────────────────────────────────────
 function initPeer() {
-  peer = new Peer({ debug: 0 });
-  peer.on('open', id => {
-    document.getElementById('peer-id-display').textContent = id;
-    generateQR();
-  });
-  peer.on('connection', conn => {
-    peerConn = conn;
-    document.getElementById('phone-connected-status').classList.add('visible');
-    showToast('📱 Telefoon verbonden!');
-    conn.on('data', data => {
-      // Ontvang audio blob van telefoon
-      if (data.type === 'audio') {
-        const arr = new Uint8Array(data.buffer);
-        audioBlob = new Blob([arr], { type: 'audio/webm' });
-        const url = URL.createObjectURL(audioBlob);
-        const preview = document.getElementById('audio-preview');
-        preview.src = url;
-        preview.classList.add('visible');
-        document.getElementById('transcribe-btn').disabled = false;
-        showToast('✅ Audio ontvangen van telefoon!');
-        document.getElementById('record-status').textContent = 'Audio ontvangen van telefoon';
-      }
+  if (typeof Peer === 'undefined') {
+    document.getElementById('peer-id-display').textContent = 'niet beschikbaar';
+    return;
+  }
+  try {
+    peer = new Peer({ debug: 0 });
+    peer.on('open', id => {
+      document.getElementById('peer-id-display').textContent = id;
+      try { generateQR(); } catch(e) {}
     });
-  });
-  peer.on('error', () => {
-    document.getElementById('peer-id-display').textContent = 'verbinding mislukt';
-  });
+    peer.on('connection', conn => {
+      peerConn = conn;
+      document.getElementById('phone-connected-status').classList.add('visible');
+      showToast('📱 Telefoon verbonden!');
+      conn.on('data', data => {
+        if (data.type === 'audio') {
+          const arr = new Uint8Array(data.buffer);
+          audioBlob = new Blob([arr], { type: 'audio/webm' });
+          const url = URL.createObjectURL(audioBlob);
+          const preview = document.getElementById('audio-preview');
+          preview.src = url;
+          preview.classList.add('visible');
+          document.getElementById('transcribe-btn').disabled = false;
+          showToast('✅ Audio ontvangen van telefoon!');
+          document.getElementById('record-status').textContent = 'Audio ontvangen van telefoon';
+        }
+      });
+    });
+    peer.on('error', () => {
+      document.getElementById('peer-id-display').textContent = 'niet beschikbaar';
+    });
+  } catch(e) {
+    document.getElementById('peer-id-display').textContent = 'niet beschikbaar';
+  }
 }
 
 function generateQR() {
