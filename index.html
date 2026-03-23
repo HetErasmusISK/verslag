@@ -417,10 +417,7 @@
       <h1>📋 Verslagmaker</h1>
       <div class="subtitle">Leerlingbespreking &amp; Oudergesprek</div>
     </div>
-    <div class="api-key-area">
-      <label>Anthropic API-sleutel</label>
-      <input type="password" id="api-key" placeholder="sk-ant-..." autocomplete="off">
-    </div>
+    <div style="font-size:0.78rem;color:var(--border);letter-spacing:0.05em;">Gratis · Geen account nodig</div>
   </header>
 
   <main>
@@ -455,17 +452,17 @@
 
     <!-- OPNAME -->
     <div class="card">
-      <div class="card-title"><span class="icon">🎙️</span> Opname</div>
+      <div class="card-title"><span class="icon">🎙️</span> Opname & Transcriptie</div>
       <div class="record-area">
         <div class="timer" id="timer-display">0:00</div>
         <button class="record-btn idle" id="record-btn" onclick="toggleRecord()">🎙️</button>
-        <div class="record-status" id="record-status">Klik om op te nemen</div>
+        <div class="record-status" id="record-status">Klik om op te nemen — transcriptie gaat automatisch</div>
         <audio id="audio-preview" class="audio-preview" controls></audio>
       </div>
-      <div class="btn-row" style="justify-content:center;margin-top:0.5rem;">
-        <button class="btn btn-primary" id="transcribe-btn" onclick="transcribeAudio()" disabled>
-          ✨ Transcribeer
-        </button>
+      <div id="live-transcript-preview" style="display:none;margin-top:0.75rem;padding:0.6rem 0.8rem;background:var(--warm);border-radius:8px;font-size:0.85rem;color:var(--muted);font-style:italic;min-height:2rem;">
+        Luisteren...
+      </div>
+      <div class="btn-row" style="justify-content:center;margin-top:1rem;">
         <button class="btn btn-secondary" onclick="clearAll()">🗑️ Alles wissen</button>
       </div>
     </div>
@@ -473,7 +470,8 @@
     <!-- TRANSCRIPTIE -->
     <div class="card">
       <div class="card-title"><span class="icon">📄</span> Transcriptie</div>
-      <div class="transcript-box" id="transcript-box">Nog geen transcriptie. Neem eerst een gesprek op.</div>
+      <div class="transcript-box" id="transcript-box" contenteditable="true" style="min-height:120px;outline:none;">Transcriptie verschijnt hier tijdens de opname. Je kunt daarna ook zelf tekst aanpassen of toevoegen.</div>
+      <div style="font-size:0.75rem;color:var(--muted);margin-top:0.5rem;">💡 Je kunt de transcriptie handmatig aanpassen voordat je het verslag maakt.</div>
       <div class="btn-row" style="margin-top:1rem;">
         <button class="btn btn-primary" id="verslag-btn" onclick="generateVerslag()" disabled>
           📋 Maak verslag
@@ -619,64 +617,104 @@ function generateQR() {
 }
 
 // ─────────────────────────────────────────────
-// OPNAME (computer microfoon)
+// OPNAME + WEB SPEECH API (gratis, live)
 // ─────────────────────────────────────────────
+let recognition = null;
+let fullTranscript = '';
+
 async function toggleRecord() {
   if (!isRecording) await startRecord();
   else stopRecord();
 }
 
 async function startRecord() {
-  // Check of we op https of localhost zitten
   if (location.protocol === 'file:') {
-    showToast('❌ Werkt niet als lokaal bestand — upload naar Netlify of open via localhost');
-    document.getElementById('record-status').textContent = '⚠️ Open de app via Netlify (https), niet als lokaal bestand';
-    document.getElementById('record-status').style.color = 'var(--accent)';
+    showToast('❌ Open de app via Netlify (https), niet als lokaal bestand');
     return;
   }
-  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    showToast('❌ Browser ondersteunt geen microfoon opname');
-    document.getElementById('record-status').textContent = '⚠️ Gebruik Chrome of Firefox via https://';
-    document.getElementById('record-status').style.color = 'var(--accent)';
+
+  // Check Web Speech API
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    showToast('❌ Gebruik Chrome — andere browsers ondersteunen geen spraakherkenning');
+    document.getElementById('record-status').textContent = '⚠️ Gebruik Google Chrome';
     return;
   }
 
   try {
+    // Start audio opname (voor terugluisteren)
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
     audioChunks = [];
-
-    const mimeType = getSupportedMimeType();
     try {
-      mediaRecorder = new MediaRecorder(stream, { mimeType });
-    } catch (e) {
-      // Fallback zonder mimeType opgeven
+      mediaRecorder = new MediaRecorder(stream, { mimeType: getSupportedMimeType() });
+    } catch(e) {
       mediaRecorder = new MediaRecorder(stream);
     }
-
-    mediaRecorder.ondataavailable = e => {
-      if (e.data && e.data.size > 0) audioChunks.push(e.data);
-    };
-    mediaRecorder.onerror = e => {
-      showToast('❌ Opnamefout: ' + (e.error?.message || 'onbekend'));
-      stopRecord();
-    };
+    mediaRecorder.ondataavailable = e => { if (e.data && e.data.size > 0) audioChunks.push(e.data); };
     mediaRecorder.onstop = () => {
-      if (audioChunks.length === 0) {
-        showToast('⚠️ Geen audio opgenomen — probeer opnieuw');
-        return;
-      }
       const blobType = mediaRecorder.mimeType || 'audio/webm';
       audioBlob = new Blob(audioChunks, { type: blobType });
       const url = URL.createObjectURL(audioBlob);
       const preview = document.getElementById('audio-preview');
       preview.src = url;
       preview.classList.add('visible');
-      document.getElementById('transcribe-btn').disabled = false;
       stream.getTracks().forEach(t => t.stop());
-      showToast('✅ Opname klaar!');
+    };
+    mediaRecorder.start(500);
+
+    // Start spraakherkenning
+    fullTranscript = '';
+    recognition = new SpeechRecognition();
+    recognition.lang = 'nl-NL';
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.maxAlternatives = 1;
+
+    let interimText = '';
+
+    recognition.onresult = (event) => {
+      interimText = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const result = event.results[i];
+        if (result.isFinal) {
+          fullTranscript += result[0].transcript + ' ';
+        } else {
+          interimText += result[0].transcript;
+        }
+      }
+      // Toon live preview
+      const preview = document.getElementById('live-transcript-preview');
+      preview.textContent = interimText || '...';
+
+      // Update transcript box
+      const box = document.getElementById('transcript-box');
+      box.textContent = fullTranscript + (interimText ? `[${interimText}]` : '');
+      box.className = 'transcript-box has-content';
+
+      // Verslag knop activeren zodra er tekst is
+      if (fullTranscript.trim().length > 10) {
+        document.getElementById('verslag-btn').disabled = false;
+      }
     };
 
-    mediaRecorder.start(500);
+    recognition.onerror = (e) => {
+      if (e.error === 'not-allowed') {
+        showToast('❌ Microfoon toegang geweigerd');
+      } else if (e.error === 'no-speech') {
+        // Normaal — geen actie nodig
+      } else {
+        showToast('⚠️ Spraakherkenning fout: ' + e.error);
+      }
+    };
+
+    // Herstart automatisch als het stopt (Chrome stopt na stilte)
+    recognition.onend = () => {
+      if (isRecording) recognition.start();
+    };
+
+    recognition.start();
+
+    // UI updaten
     isRecording = true;
     seconds = 0;
     timerInterval = setInterval(() => {
@@ -688,33 +726,44 @@ async function startRecord() {
     btn.className = 'record-btn recording';
     btn.textContent = '⏹';
     document.getElementById('record-status').className = 'record-status active';
-    document.getElementById('record-status').textContent = 'Opname bezig...';
-    document.getElementById('record-status').style.color = '';
+    document.getElementById('record-status').textContent = 'Opname & transcriptie bezig...';
+    document.getElementById('live-transcript-preview').style.display = 'block';
+    document.getElementById('transcript-box').textContent = '';
+    document.getElementById('transcript-box').className = 'transcript-box has-content';
 
   } catch (e) {
     let msg = '❌ Microfoon niet beschikbaar';
-    if (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError') {
-      msg = '❌ Microfoon toegang geweigerd — sta toegang toe in je browser';
-    } else if (e.name === 'NotFoundError') {
-      msg = '❌ Geen microfoon gevonden';
-    } else if (e.name === 'NotReadableError') {
-      msg = '❌ Microfoon in gebruik door andere app';
-    }
+    if (e.name === 'NotAllowedError') msg = '❌ Microfoon toegang geweigerd — sta toegang toe in Chrome';
+    else if (e.name === 'NotFoundError') msg = '❌ Geen microfoon gevonden';
     showToast(msg);
     document.getElementById('record-status').textContent = msg;
-    document.getElementById('record-status').style.color = 'var(--accent)';
   }
 }
 
 function stopRecord() {
-  if (mediaRecorder) mediaRecorder.stop();
   isRecording = false;
+
+  if (recognition) { recognition.onend = null; recognition.stop(); recognition = null; }
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+
   clearInterval(timerInterval);
+
+  // Zet definitieve transcript in box
+  const box = document.getElementById('transcript-box');
+  box.textContent = fullTranscript.trim() || box.textContent.replace(/\[.*?\]/g, '').trim();
+  if (fullTranscript.trim()) {
+    box.className = 'transcript-box has-content';
+    document.getElementById('verslag-btn').disabled = false;
+  }
+
+  document.getElementById('live-transcript-preview').style.display = 'none';
+
   const btn = document.getElementById('record-btn');
   btn.className = 'record-btn idle';
   btn.textContent = '🎙️';
   document.getElementById('record-status').className = 'record-status';
-  document.getElementById('record-status').textContent = 'Opname gestopt — klaar voor transcriptie';
+  document.getElementById('record-status').textContent = 'Opname gestopt — controleer transcriptie en maak verslag';
+  showToast('✅ Opname klaar!');
 }
 
 function getSupportedMimeType() {
@@ -728,90 +777,12 @@ function formatTime(s) {
 }
 
 // ─────────────────────────────────────────────
-// TRANSCRIPTIE via Anthropic
-// ─────────────────────────────────────────────
-async function transcribeAudio() {
-  const apiKey = document.getElementById('api-key').value.trim();
-  if (!apiKey) { showToast('⚠️ Vul eerst je API-sleutel in'); return; }
-  if (!audioBlob) { showToast('⚠️ Geen audio beschikbaar'); return; }
-
-  const btn = document.getElementById('transcribe-btn');
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span> Transcriberen...';
-  document.getElementById('transcript-box').textContent = 'Bezig met transcriberen...';
-  document.getElementById('transcript-box').className = 'transcript-box';
-
-  try {
-    // Converteer audio naar base64
-    const arrayBuffer = await audioBlob.arrayBuffer();
-    const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
-    const mimeType = audioBlob.type || 'audio/webm';
-
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
-        model: 'claude-opus-4-5',
-        max_tokens: 4096,
-        messages: [{
-          role: 'user',
-          content: [
-            {
-              type: 'text',
-              text: 'Transcribeer de volgende audio zo nauwkeurig mogelijk. Geef alleen de tekst terug, geen extra uitleg of opmaak. Als er meerdere sprekers zijn, geef dan aan wie er spreekt (Spreker 1:, Spreker 2:, etc.).'
-            },
-            {
-              type: 'document',
-              source: {
-                type: 'base64',
-                media_type: mimeType,
-                data: base64
-              }
-            }
-          ]
-        }]
-      })
-    });
-
-    if (!response.ok) {
-      // Fallback: gebruik tekst-model met uitleg
-      throw new Error(`API fout: ${response.status}`);
-    }
-
-    const data = await response.json();
-    transcript = data.content[0].text;
-    document.getElementById('transcript-box').textContent = transcript;
-    document.getElementById('transcript-box').className = 'transcript-box has-content';
-    document.getElementById('verslag-btn').disabled = false;
-    showToast('✅ Transcriptie klaar!');
-  } catch (e) {
-    // Fallback: stuur audio als beschrijving + vraag om handmatige tekst
-    showToast('⚠️ Audio transcriptie niet beschikbaar via API — zie transcript vak');
-    document.getElementById('transcript-box').innerHTML = 
-      `<span style="color:var(--accent)">⚠️ Automatische audiotranscriptie vereist Claude met audiocapabiliteiten.<br><br>` +
-      `Alternatief: Typ of plak de transcriptie hieronder handmatig, of gebruik een externe tool (bijv. whisper.ai, otter.ai) en plak de tekst hier.</span>`;
-    document.getElementById('transcript-box').contentEditable = 'true';
-    document.getElementById('transcript-box').classList.add('has-content');
-    document.getElementById('transcript-box').addEventListener('input', () => {
-      transcript = document.getElementById('transcript-box').textContent;
-      document.getElementById('verslag-btn').disabled = !transcript.trim();
-    });
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = '✨ Transcribeer';
-  }
-}
-
-// ─────────────────────────────────────────────
-// VERSLAG GENEREREN
+// VERSLAG GENEREREN (template, geen API nodig)
 // ─────────────────────────────────────────────
 async function generateVerslag() {
-  const apiKey = document.getElementById('api-key').value.trim();
-  if (!apiKey) { showToast('⚠️ Vul eerst je API-sleutel in'); return; }
+  const transcriptBox = document.getElementById('transcript-box');
+  transcript = transcriptBox.textContent.trim();
+  if (!transcript) { showToast('⚠️ Geen transcriptie beschikbaar'); return; }
 
   const type = document.getElementById('gesprek-type').value;
   const datum = document.getElementById('gesprek-datum').value;
@@ -823,9 +794,55 @@ async function generateVerslag() {
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> Verslag maken...';
 
-  const prompt = `Je bent een onderwijsassistent die verslagen schrijft voor een ISK (school voor nieuwkomers).
+  // Probeer Anthropic API als er een sleutel is, anders template
+  const apiKey = localStorage.getItem('anthropic_key') || '';
 
-Maak een beknopt administratief verslag op basis van de volgende transcriptie. Schrijf in correct Nederlands.
+  if (apiKey) {
+    await generateVerslagViaAPI(apiKey, typeLabel, datum, leerling, aanwezigen);
+  } else {
+    generateVerslagTemplate(typeLabel, datum, leerling, aanwezigen);
+  }
+
+  btn.disabled = false;
+  btn.innerHTML = '📋 Maak verslag';
+}
+
+function generateVerslagTemplate(typeLabel, datum, leerling, aanwezigen) {
+  // Splits transcript in zinnen voor samenvatting
+  const zinnen = transcript.split(/[.!?]+/).map(z => z.trim()).filter(z => z.length > 15);
+  const samenvatting = zinnen.slice(0, 3).join('. ') + (zinnen.length > 0 ? '.' : '');
+
+  // Zoek actiepunten (zinnen met trefwoorden)
+  const actiewoorden = ['gaat', 'moet', 'zal', 'afspraak', 'volgende keer', 'contact', 'regelen', 'zorgen', 'meenemen', 'inleveren', 'proberen'];
+  const actiepunten = zinnen.filter(z =>
+    actiewoorden.some(w => z.toLowerCase().includes(w))
+  ).slice(0, 4);
+
+  const verslagTekst = `VERSLAG ${typeLabel.toUpperCase()}
+Datum: ${datum}
+Leerling: ${leerling}
+Aanwezigen: ${aanwezigen}
+
+SAMENVATTING
+${samenvatting || 'Zie transcriptie voor details van het gesprek.'}
+
+ACTIEPUNTEN
+${actiepunten.length > 0
+  ? actiepunten.map(a => `• ${a}.`).join('\n')
+  : '• Geen specifieke actiepunten gevonden — controleer de transcriptie.'}
+
+OVERIGE OPMERKINGEN
+—
+
+Ondertekend: _________________________ Datum: _____________`;
+
+  renderVerslag(verslagTekst);
+  showToast('✅ Verslag klaar! Controleer en pas aan waar nodig.');
+}
+
+async function generateVerslagViaAPI(apiKey, typeLabel, datum, leerling, aanwezigen) {
+  const prompt = `Je bent een onderwijsassistent die verslagen schrijft voor een ISK (school voor nieuwkomers).
+Maak een beknopt administratief verslag op basis van de transcriptie. Schrijf in correct Nederlands.
 
 GESPREKSGEGEVENS:
 - Type: ${typeLabel}
@@ -836,7 +853,7 @@ GESPREKSGEGEVENS:
 TRANSCRIPTIE:
 ${transcript}
 
-Geef het verslag in dit formaat:
+Geef het verslag in dit exacte formaat:
 
 VERSLAG ${typeLabel.toUpperCase()}
 Datum: ${datum}
@@ -844,65 +861,50 @@ Leerling: ${leerling}
 Aanwezigen: ${aanwezigen}
 
 SAMENVATTING
-[2-4 zinnen die het gesprek samenvatten]
+[2-4 zinnen]
 
 ACTIEPUNTEN
-• [actiepunt 1]
-• [actiepunt 2]
-• [etc.]
+• [actiepunt]
 
 OVERIGE OPMERKINGEN
-[Eventuele relevante notities die niet in de samenvatting passen. Laat weg als niet van toepassing.]
+[of laat weg]
 
 Ondertekend: _________________________ Datum: _____________`;
 
   try {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 1500,
-        messages: [{ role: 'user', content: prompt }]
-      })
+      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 1500, messages: [{ role: 'user', content: prompt }] })
     });
-
     const data = await response.json();
-    const verslag = data.content[0].text;
-
-    // Render verslag
-    const box = document.getElementById('verslag-box');
-    box.innerHTML = '';
-    const lines = verslag.split('\n');
-    let html = '';
-    for (const line of lines) {
-      if (line.startsWith('VERSLAG') || line.startsWith('SAMENVATTING') || line.startsWith('ACTIEPUNTEN') || line.startsWith('OVERIGE')) {
-        html += `<h3>${line}</h3>`;
-      } else if (line.startsWith('•')) {
-        html += `<p style="padding-left:1rem">${line}</p>`;
-      } else if (line.trim()) {
-        html += `<p>${line}</p>`;
-      } else {
-        html += '<br>';
-      }
-    }
-    box.innerHTML = html;
-
-    // Sla op voor download
-    box.dataset.raw = verslag;
-    document.getElementById('download-btn').disabled = false;
-    document.getElementById('copy-btn').disabled = false;
-    showToast('✅ Verslag klaar!');
-  } catch (e) {
-    showToast('❌ Fout bij verslag genereren: ' + e.message);
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = '📋 Maak verslag';
+    renderVerslag(data.content[0].text);
+    showToast('✅ Verslag klaar via AI!');
+  } catch(e) {
+    // Fallback naar template
+    generateVerslagTemplate(typeLabel, datum, leerling, aanwezigen);
   }
+}
+
+function renderVerslag(verslagTekst) {
+  const box = document.getElementById('verslag-box');
+  const lines = verslagTekst.split('\n');
+  let html = '';
+  for (const line of lines) {
+    if (line.startsWith('VERSLAG') || line.startsWith('SAMENVATTING') || line.startsWith('ACTIEPUNTEN') || line.startsWith('OVERIGE')) {
+      html += `<h3>${line}</h3>`;
+    } else if (line.startsWith('•')) {
+      html += `<p style="padding-left:1rem">${line}</p>`;
+    } else if (line.trim()) {
+      html += `<p>${line}</p>`;
+    } else {
+      html += '<br>';
+    }
+  }
+  box.innerHTML = html;
+  box.dataset.raw = verslagTekst;
+  document.getElementById('download-btn').disabled = false;
+  document.getElementById('copy-btn').disabled = false;
 }
 
 // ─────────────────────────────────────────────
@@ -931,15 +933,15 @@ function copyVerslag() {
 // ALLES WISSEN
 // ─────────────────────────────────────────────
 function clearAll() {
-  audioBlob = null; audioChunks = []; transcript = '';
+  if (isRecording) stopRecord();
+  audioBlob = null; audioChunks = []; transcript = ''; fullTranscript = '';
   document.getElementById('audio-preview').classList.remove('visible');
   document.getElementById('audio-preview').src = '';
-  document.getElementById('transcript-box').textContent = 'Nog geen transcriptie. Neem eerst een gesprek op.';
+  document.getElementById('transcript-box').textContent = 'Transcriptie verschijnt hier tijdens de opname. Je kunt daarna ook zelf tekst aanpassen of toevoegen.';
   document.getElementById('transcript-box').className = 'transcript-box';
-  document.getElementById('transcript-box').contentEditable = 'false';
+  document.getElementById('live-transcript-preview').style.display = 'none';
   document.getElementById('verslag-box').innerHTML = '<span class="placeholder">Verslag verschijnt hier na transcriptie.</span>';
   document.getElementById('timer-display').textContent = '0:00';
-  document.getElementById('transcribe-btn').disabled = true;
   document.getElementById('verslag-btn').disabled = true;
   document.getElementById('download-btn').disabled = true;
   document.getElementById('copy-btn').disabled = true;
