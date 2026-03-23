@@ -1,0 +1,1054 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Verslagmaker</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap');
+
+  :root {
+    --ink: #1a1a2e;
+    --paper: #f5f0e8;
+    --warm: #e8dfc8;
+    --accent: #c84b31;
+    --accent2: #2d6a4f;
+    --muted: #7a7060;
+    --border: #d4c9b0;
+    --card: #fffdf7;
+    --recording: #c84b31;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--paper);
+    color: var(--ink);
+    min-height: 100vh;
+  }
+
+  /* ── HEADER ── */
+  header {
+    background: var(--ink);
+    color: var(--paper);
+    padding: 1.2rem 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 3px solid var(--accent);
+  }
+  header h1 {
+    font-family: 'DM Serif Display', serif;
+    font-size: 1.6rem;
+    letter-spacing: -0.02em;
+  }
+  header .subtitle {
+    font-size: 0.75rem;
+    color: var(--border);
+    font-weight: 300;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-top: 2px;
+  }
+  .api-key-area {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .api-key-area input {
+    background: rgba(255,255,255,0.1);
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 6px;
+    color: var(--paper);
+    font-family: monospace;
+    font-size: 0.8rem;
+    padding: 0.4rem 0.6rem;
+    width: 240px;
+  }
+  .api-key-area input::placeholder { color: rgba(255,255,255,0.4); }
+  .api-key-area label { font-size: 0.75rem; color: var(--border); }
+
+  /* ── MAIN LAYOUT ── */
+  main {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  /* ── CARD ── */
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  }
+  .card-title {
+    font-family: 'DM Serif Display', serif;
+    font-size: 1.1rem;
+    color: var(--ink);
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .card-title .icon { font-size: 1.1rem; }
+
+  /* ── FORMULIER ── */
+  .form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+  .form-group { display: flex; flex-direction: column; gap: 0.35rem; }
+  .form-group label { font-size: 0.78rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+  .form-group input, .form-group select {
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 0.55rem 0.75rem;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.9rem;
+    background: var(--paper);
+    color: var(--ink);
+    transition: border-color 0.2s;
+  }
+  .form-group input:focus, .form-group select:focus {
+    outline: none;
+    border-color: var(--accent2);
+  }
+
+  /* ── OPNAME ── */
+  .record-area {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.2rem;
+    padding: 1rem 0;
+  }
+
+  .record-btn {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2rem;
+    transition: all 0.2s;
+    position: relative;
+  }
+  .record-btn.idle {
+    background: var(--accent);
+    color: white;
+    box-shadow: 0 4px 20px rgba(200,75,49,0.4);
+  }
+  .record-btn.idle:hover { transform: scale(1.05); box-shadow: 0 6px 28px rgba(200,75,49,0.5); }
+  .record-btn.recording {
+    background: var(--ink);
+    color: white;
+    box-shadow: 0 4px 20px rgba(26,26,46,0.4);
+    animation: pulse 1.5s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 4px 20px rgba(200,75,49,0.4); }
+    50% { box-shadow: 0 4px 36px rgba(200,75,49,0.8); }
+  }
+
+  .record-status {
+    font-size: 0.85rem;
+    color: var(--muted);
+    text-align: center;
+  }
+  .record-status.active { color: var(--accent); font-weight: 600; }
+
+  .timer {
+    font-family: 'DM Serif Display', serif;
+    font-size: 2rem;
+    color: var(--ink);
+    letter-spacing: 0.05em;
+  }
+
+  /* ── AUDIO PREVIEW ── */
+  .audio-preview {
+    width: 100%;
+    margin-top: 0.5rem;
+    display: none;
+  }
+  .audio-preview.visible { display: block; }
+
+  /* ── KNOPPENRIJ ── */
+  .btn-row {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+  .btn {
+    padding: 0.6rem 1.2rem;
+    border-radius: 8px;
+    border: none;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.88rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.18s;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .btn-primary { background: var(--accent2); color: white; }
+  .btn-primary:hover { background: #1f4d39; }
+  .btn-secondary { background: var(--warm); color: var(--ink); border: 1px solid var(--border); }
+  .btn-secondary:hover { background: var(--border); }
+  .btn-accent { background: var(--accent); color: white; }
+  .btn-accent:hover { background: #a33a23; }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* ── TRANSCRIPT ── */
+  .transcript-box {
+    background: var(--paper);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem;
+    min-height: 100px;
+    font-size: 0.9rem;
+    line-height: 1.7;
+    color: var(--ink);
+    white-space: pre-wrap;
+    font-style: italic;
+    color: var(--muted);
+  }
+  .transcript-box.has-content { font-style: normal; color: var(--ink); }
+
+  /* ── VERSLAG ── */
+  .verslag-box {
+    background: var(--paper);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.2rem;
+    min-height: 120px;
+    font-size: 0.9rem;
+    line-height: 1.8;
+  }
+  .verslag-box h3 {
+    font-family: 'DM Serif Display', serif;
+    font-size: 1rem;
+    margin-bottom: 0.5rem;
+    color: var(--accent2);
+  }
+  .verslag-box .placeholder { color: var(--muted); font-style: italic; }
+
+  /* ── TELEFOON SECTIE ── */
+  .phone-section {
+    border: 2px dashed var(--border);
+    border-radius: 12px;
+    padding: 1.2rem;
+    background: var(--warm);
+  }
+  .phone-section summary {
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: var(--muted);
+    user-select: none;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .phone-section[open] summary { color: var(--ink); margin-bottom: 1rem; }
+  .qr-area {
+    display: flex;
+    align-items: flex-start;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+  }
+  #qrcode { background: white; padding: 0.5rem; border-radius: 8px; }
+  .qr-instructions { font-size: 0.85rem; line-height: 1.7; color: var(--ink); }
+  .qr-instructions strong { color: var(--accent); }
+  .peer-id-display {
+    font-family: monospace;
+    background: var(--ink);
+    color: var(--accent);
+    padding: 0.3rem 0.6rem;
+    border-radius: 5px;
+    font-size: 0.8rem;
+  }
+  .phone-status {
+    margin-top: 0.75rem;
+    font-size: 0.82rem;
+    padding: 0.4rem 0.8rem;
+    border-radius: 6px;
+    background: rgba(45,106,79,0.1);
+    color: var(--accent2);
+    display: none;
+  }
+  .phone-status.visible { display: block; }
+
+  /* ── SPINNER ── */
+  .spinner {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    vertical-align: middle;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── TOASTER ── */
+  #toast {
+    position: fixed;
+    bottom: 1.5rem;
+    right: 1.5rem;
+    background: var(--ink);
+    color: var(--paper);
+    padding: 0.75rem 1.2rem;
+    border-radius: 8px;
+    font-size: 0.88rem;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+    opacity: 0;
+    transform: translateY(10px);
+    transition: all 0.3s;
+    pointer-events: none;
+    z-index: 999;
+    max-width: 320px;
+  }
+  #toast.show { opacity: 1; transform: translateY(0); }
+
+  /* ── TELEFOON VIEW (aparte pagina) ── */
+  #phone-view {
+    display: none;
+    min-height: 100vh;
+    background: var(--ink);
+    color: var(--paper);
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    text-align: center;
+    gap: 1.5rem;
+  }
+  #phone-view h2 {
+    font-family: 'DM Serif Display', serif;
+    font-size: 1.8rem;
+  }
+  #phone-view .phone-record-btn {
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    border: none;
+    cursor: pointer;
+    font-size: 3rem;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  #phone-view .phone-record-btn.idle { background: var(--accent); }
+  #phone-view .phone-record-btn.recording { background: #444; animation: pulse 1.5s infinite; }
+  #phone-view .phone-status-msg { font-size: 1rem; color: rgba(255,255,255,0.6); }
+  #phone-view .phone-status-msg.active { color: var(--accent); }
+  #phone-view .phone-timer { font-family: 'DM Serif Display', serif; font-size: 3rem; }
+  #phone-view .send-btn {
+    padding: 1rem 2rem;
+    background: var(--accent2);
+    color: white;
+    border: none;
+    border-radius: 12px;
+    font-size: 1.1rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: none;
+  }
+  #phone-view .send-btn.visible { display: block; }
+  #phone-view .peer-input {
+    background: rgba(255,255,255,0.1);
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 8px;
+    color: white;
+    padding: 0.6rem 1rem;
+    font-size: 0.95rem;
+    width: 220px;
+    text-align: center;
+  }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 600px) {
+    .form-row { grid-template-columns: 1fr; }
+    header { flex-direction: column; gap: 0.75rem; align-items: flex-start; }
+    .api-key-area input { width: 100%; }
+  }
+</style>
+</head>
+<body>
+
+<!-- TELEFOON VIEW -->
+<div id="phone-view">
+  <h2>🎙️ Verslagmaker</h2>
+  <p style="color:rgba(255,255,255,0.5);font-size:0.85rem;">Telefoon als microfoon</p>
+
+  <div>
+    <label style="font-size:0.8rem;color:rgba(255,255,255,0.5);display:block;margin-bottom:0.4rem;">Verbindingscode van computer</label>
+    <input type="text" id="phone-peer-input" class="peer-input" placeholder="bijv. abc-123-xyz" autocapitalize="none">
+    <button onclick="phoneConnect()" style="margin-top:0.6rem;padding:0.5rem 1.2rem;background:var(--accent);color:white;border:none;border-radius:8px;font-size:0.9rem;cursor:pointer;">Verbinden</button>
+  </div>
+
+  <div id="phone-conn-status" style="font-size:0.85rem;color:rgba(255,255,255,0.4);">Nog niet verbonden</div>
+
+  <button id="phone-rec-btn" class="phone-record-btn idle" onclick="phoneToggleRecord()" disabled>🎙️</button>
+  <div id="phone-timer-display" class="phone-timer">0:00</div>
+  <div id="phone-status-msg" class="phone-status-msg">Verbind eerst met de computer</div>
+  <button id="phone-send-btn" class="send-btn" onclick="phoneSend()">📤 Verstuur naar computer</button>
+</div>
+
+<!-- COMPUTER VIEW -->
+<div id="computer-view">
+  <header>
+    <div>
+      <h1>📋 Verslagmaker</h1>
+      <div class="subtitle">Leerlingbespreking &amp; Oudergesprek</div>
+    </div>
+    <div class="api-key-area">
+      <label>Anthropic API-sleutel</label>
+      <input type="password" id="api-key" placeholder="sk-ant-..." autocomplete="off">
+    </div>
+  </header>
+
+  <main>
+
+    <!-- GESPREKSINFO -->
+    <div class="card">
+      <div class="card-title"><span class="icon">📝</span> Gespreksgegevens</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Type gesprek</label>
+          <select id="gesprek-type">
+            <option value="leerlingbespreking">Leerlingbespreking</option>
+            <option value="oudergesprek">Oudergesprek</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Datum</label>
+          <input type="date" id="gesprek-datum">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Naam leerling</label>
+          <input type="text" id="leerling-naam" placeholder="Voornaam achternaam">
+        </div>
+        <div class="form-group">
+          <label>Aanwezigen</label>
+          <input type="text" id="aanwezigen" placeholder="bijv. Leraar, Ouder, Leerling">
+        </div>
+      </div>
+    </div>
+
+    <!-- OPNAME -->
+    <div class="card">
+      <div class="card-title"><span class="icon">🎙️</span> Opname</div>
+      <div class="record-area">
+        <div class="timer" id="timer-display">0:00</div>
+        <button class="record-btn idle" id="record-btn" onclick="toggleRecord()">🎙️</button>
+        <div class="record-status" id="record-status">Klik om op te nemen</div>
+        <audio id="audio-preview" class="audio-preview" controls></audio>
+      </div>
+      <div class="btn-row" style="justify-content:center;margin-top:0.5rem;">
+        <button class="btn btn-primary" id="transcribe-btn" onclick="transcribeAudio()" disabled>
+          ✨ Transcribeer
+        </button>
+        <button class="btn btn-secondary" onclick="clearAll()">🗑️ Alles wissen</button>
+      </div>
+    </div>
+
+    <!-- TRANSCRIPTIE -->
+    <div class="card">
+      <div class="card-title"><span class="icon">📄</span> Transcriptie</div>
+      <div class="transcript-box" id="transcript-box">Nog geen transcriptie. Neem eerst een gesprek op.</div>
+      <div class="btn-row" style="margin-top:1rem;">
+        <button class="btn btn-primary" id="verslag-btn" onclick="generateVerslag()" disabled>
+          📋 Maak verslag
+        </button>
+      </div>
+    </div>
+
+    <!-- VERSLAG -->
+    <div class="card">
+      <div class="card-title"><span class="icon">📋</span> Verslag</div>
+      <div class="verslag-box" id="verslag-box">
+        <span class="placeholder">Verslag verschijnt hier na transcriptie.</span>
+      </div>
+      <div class="btn-row" style="margin-top:1rem;">
+        <button class="btn btn-accent" id="download-btn" onclick="downloadVerslag()" disabled>
+          ⬇️ Download als .txt
+        </button>
+        <button class="btn btn-secondary" id="copy-btn" onclick="copyVerslag()" disabled>
+          📋 Kopiëren
+        </button>
+      </div>
+    </div>
+
+    <!-- TELEFOON KOPPELING -->
+    <details class="phone-section" id="phone-details">
+      <summary>📱 Telefoon als microfoon (optioneel)</summary>
+      <div class="qr-area">
+        <div id="qrcode"></div>
+        <div class="qr-instructions">
+          <p>Scan de QR-code met je telefoon om deze app te openen als microfoon.</p>
+          <br>
+          <p><strong>Stap 1</strong> — Scan de code (zorg dat je op hetzelfde wifi-netwerk zit)</p>
+          <p><strong>Stap 2</strong> — Voer de verbindingscode in op je telefoon:</p>
+          <p><span class="peer-id-display" id="peer-id-display">laden...</span></p>
+          <p><strong>Stap 3</strong> — Neem op via de telefoon → audio verschijnt automatisch hier</p>
+          <div id="phone-connected-status" class="phone-status">✅ Telefoon verbonden en klaar voor opname</div>
+        </div>
+      </div>
+    </details>
+
+  </main>
+</div>
+
+<div id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.2/peerjs.min.js"></script>
+<script>
+// ─────────────────────────────────────────────
+// DETECTEER MODE (telefoon of computer)
+// ─────────────────────────────────────────────
+const isPhone = location.hash === '#telefoon';
+if (isPhone) {
+  document.getElementById('phone-view').style.display = 'flex';
+  document.getElementById('computer-view').style.display = 'none';
+} else {
+  initComputerApp();
+}
+
+// ─────────────────────────────────────────────
+// STATE
+// ─────────────────────────────────────────────
+let mediaRecorder = null;
+let audioChunks = [];
+let audioBlob = null;
+let isRecording = false;
+let timerInterval = null;
+let seconds = 0;
+let transcript = '';
+let peer = null;
+let peerConn = null;
+
+// ─────────────────────────────────────────────
+// COMPUTER APP INIT
+// ─────────────────────────────────────────────
+function initComputerApp() {
+  // Datum invullen
+  document.getElementById('gesprek-datum').value = new Date().toISOString().split('T')[0];
+
+  // API key opslaan/laden
+  const savedKey = localStorage.getItem('anthropic_key');
+  if (savedKey) document.getElementById('api-key').value = savedKey;
+  document.getElementById('api-key').addEventListener('change', () => {
+    localStorage.setItem('anthropic_key', document.getElementById('api-key').value);
+  });
+
+  // Peer.js voor telefoonkoppeling
+  initPeer();
+
+  // QR code genereren
+  generateQR();
+}
+
+// ─────────────────────────────────────────────
+// PEER.JS KOPPELING
+// ─────────────────────────────────────────────
+function initPeer() {
+  peer = new Peer({ debug: 0 });
+  peer.on('open', id => {
+    document.getElementById('peer-id-display').textContent = id;
+    generateQR();
+  });
+  peer.on('connection', conn => {
+    peerConn = conn;
+    document.getElementById('phone-connected-status').classList.add('visible');
+    showToast('📱 Telefoon verbonden!');
+    conn.on('data', data => {
+      // Ontvang audio blob van telefoon
+      if (data.type === 'audio') {
+        const arr = new Uint8Array(data.buffer);
+        audioBlob = new Blob([arr], { type: 'audio/webm' });
+        const url = URL.createObjectURL(audioBlob);
+        const preview = document.getElementById('audio-preview');
+        preview.src = url;
+        preview.classList.add('visible');
+        document.getElementById('transcribe-btn').disabled = false;
+        showToast('✅ Audio ontvangen van telefoon!');
+        document.getElementById('record-status').textContent = 'Audio ontvangen van telefoon';
+      }
+    });
+  });
+  peer.on('error', () => {
+    document.getElementById('peer-id-display').textContent = 'verbinding mislukt';
+  });
+}
+
+function generateQR() {
+  const el = document.getElementById('qrcode');
+  el.innerHTML = '';
+  const peerId = document.getElementById('peer-id-display').textContent;
+  const url = `${location.href.split('#')[0]}#telefoon?peer=${peerId}`;
+  if (typeof QRCode !== 'undefined') {
+    new QRCode(el, { text: url, width: 120, height: 120, colorDark: '#1a1a2e', colorLight: '#fffdf7' });
+  }
+}
+
+// ─────────────────────────────────────────────
+// OPNAME (computer microfoon)
+// ─────────────────────────────────────────────
+async function toggleRecord() {
+  if (!isRecording) await startRecord();
+  else stopRecord();
+}
+
+async function startRecord() {
+  // Check of we op https of localhost zitten
+  if (location.protocol === 'file:') {
+    showToast('❌ Werkt niet als lokaal bestand — upload naar Netlify of open via localhost');
+    document.getElementById('record-status').textContent = '⚠️ Open de app via Netlify (https), niet als lokaal bestand';
+    document.getElementById('record-status').style.color = 'var(--accent)';
+    return;
+  }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    showToast('❌ Browser ondersteunt geen microfoon opname');
+    document.getElementById('record-status').textContent = '⚠️ Gebruik Chrome of Firefox via https://';
+    document.getElementById('record-status').style.color = 'var(--accent)';
+    return;
+  }
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    audioChunks = [];
+
+    const mimeType = getSupportedMimeType();
+    try {
+      mediaRecorder = new MediaRecorder(stream, { mimeType });
+    } catch (e) {
+      // Fallback zonder mimeType opgeven
+      mediaRecorder = new MediaRecorder(stream);
+    }
+
+    mediaRecorder.ondataavailable = e => {
+      if (e.data && e.data.size > 0) audioChunks.push(e.data);
+    };
+    mediaRecorder.onerror = e => {
+      showToast('❌ Opnamefout: ' + (e.error?.message || 'onbekend'));
+      stopRecord();
+    };
+    mediaRecorder.onstop = () => {
+      if (audioChunks.length === 0) {
+        showToast('⚠️ Geen audio opgenomen — probeer opnieuw');
+        return;
+      }
+      const blobType = mediaRecorder.mimeType || 'audio/webm';
+      audioBlob = new Blob(audioChunks, { type: blobType });
+      const url = URL.createObjectURL(audioBlob);
+      const preview = document.getElementById('audio-preview');
+      preview.src = url;
+      preview.classList.add('visible');
+      document.getElementById('transcribe-btn').disabled = false;
+      stream.getTracks().forEach(t => t.stop());
+      showToast('✅ Opname klaar!');
+    };
+
+    mediaRecorder.start(500);
+    isRecording = true;
+    seconds = 0;
+    timerInterval = setInterval(() => {
+      seconds++;
+      document.getElementById('timer-display').textContent = formatTime(seconds);
+    }, 1000);
+
+    const btn = document.getElementById('record-btn');
+    btn.className = 'record-btn recording';
+    btn.textContent = '⏹';
+    document.getElementById('record-status').className = 'record-status active';
+    document.getElementById('record-status').textContent = 'Opname bezig...';
+    document.getElementById('record-status').style.color = '';
+
+  } catch (e) {
+    let msg = '❌ Microfoon niet beschikbaar';
+    if (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError') {
+      msg = '❌ Microfoon toegang geweigerd — sta toegang toe in je browser';
+    } else if (e.name === 'NotFoundError') {
+      msg = '❌ Geen microfoon gevonden';
+    } else if (e.name === 'NotReadableError') {
+      msg = '❌ Microfoon in gebruik door andere app';
+    }
+    showToast(msg);
+    document.getElementById('record-status').textContent = msg;
+    document.getElementById('record-status').style.color = 'var(--accent)';
+  }
+}
+
+function stopRecord() {
+  if (mediaRecorder) mediaRecorder.stop();
+  isRecording = false;
+  clearInterval(timerInterval);
+  const btn = document.getElementById('record-btn');
+  btn.className = 'record-btn idle';
+  btn.textContent = '🎙️';
+  document.getElementById('record-status').className = 'record-status';
+  document.getElementById('record-status').textContent = 'Opname gestopt — klaar voor transcriptie';
+}
+
+function getSupportedMimeType() {
+  const types = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'];
+  for (const t of types) if (MediaRecorder.isTypeSupported(t)) return t;
+  return 'audio/webm';
+}
+
+function formatTime(s) {
+  return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;
+}
+
+// ─────────────────────────────────────────────
+// TRANSCRIPTIE via Anthropic
+// ─────────────────────────────────────────────
+async function transcribeAudio() {
+  const apiKey = document.getElementById('api-key').value.trim();
+  if (!apiKey) { showToast('⚠️ Vul eerst je API-sleutel in'); return; }
+  if (!audioBlob) { showToast('⚠️ Geen audio beschikbaar'); return; }
+
+  const btn = document.getElementById('transcribe-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Transcriberen...';
+  document.getElementById('transcript-box').textContent = 'Bezig met transcriberen...';
+  document.getElementById('transcript-box').className = 'transcript-box';
+
+  try {
+    // Converteer audio naar base64
+    const arrayBuffer = await audioBlob.arrayBuffer();
+    const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+    const mimeType = audioBlob.type || 'audio/webm';
+
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify({
+        model: 'claude-opus-4-5',
+        max_tokens: 4096,
+        messages: [{
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: 'Transcribeer de volgende audio zo nauwkeurig mogelijk. Geef alleen de tekst terug, geen extra uitleg of opmaak. Als er meerdere sprekers zijn, geef dan aan wie er spreekt (Spreker 1:, Spreker 2:, etc.).'
+            },
+            {
+              type: 'document',
+              source: {
+                type: 'base64',
+                media_type: mimeType,
+                data: base64
+              }
+            }
+          ]
+        }]
+      })
+    });
+
+    if (!response.ok) {
+      // Fallback: gebruik tekst-model met uitleg
+      throw new Error(`API fout: ${response.status}`);
+    }
+
+    const data = await response.json();
+    transcript = data.content[0].text;
+    document.getElementById('transcript-box').textContent = transcript;
+    document.getElementById('transcript-box').className = 'transcript-box has-content';
+    document.getElementById('verslag-btn').disabled = false;
+    showToast('✅ Transcriptie klaar!');
+  } catch (e) {
+    // Fallback: stuur audio als beschrijving + vraag om handmatige tekst
+    showToast('⚠️ Audio transcriptie niet beschikbaar via API — zie transcript vak');
+    document.getElementById('transcript-box').innerHTML = 
+      `<span style="color:var(--accent)">⚠️ Automatische audiotranscriptie vereist Claude met audiocapabiliteiten.<br><br>` +
+      `Alternatief: Typ of plak de transcriptie hieronder handmatig, of gebruik een externe tool (bijv. whisper.ai, otter.ai) en plak de tekst hier.</span>`;
+    document.getElementById('transcript-box').contentEditable = 'true';
+    document.getElementById('transcript-box').classList.add('has-content');
+    document.getElementById('transcript-box').addEventListener('input', () => {
+      transcript = document.getElementById('transcript-box').textContent;
+      document.getElementById('verslag-btn').disabled = !transcript.trim();
+    });
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '✨ Transcribeer';
+  }
+}
+
+// ─────────────────────────────────────────────
+// VERSLAG GENEREREN
+// ─────────────────────────────────────────────
+async function generateVerslag() {
+  const apiKey = document.getElementById('api-key').value.trim();
+  if (!apiKey) { showToast('⚠️ Vul eerst je API-sleutel in'); return; }
+
+  const type = document.getElementById('gesprek-type').value;
+  const datum = document.getElementById('gesprek-datum').value;
+  const leerling = document.getElementById('leerling-naam').value || 'Niet ingevuld';
+  const aanwezigen = document.getElementById('aanwezigen').value || 'Niet ingevuld';
+  const typeLabel = type === 'leerlingbespreking' ? 'Leerlingbespreking' : 'Oudergesprek';
+
+  const btn = document.getElementById('verslag-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Verslag maken...';
+
+  const prompt = `Je bent een onderwijsassistent die verslagen schrijft voor een ISK (school voor nieuwkomers).
+
+Maak een beknopt administratief verslag op basis van de volgende transcriptie. Schrijf in correct Nederlands.
+
+GESPREKSGEGEVENS:
+- Type: ${typeLabel}
+- Datum: ${datum}
+- Leerling: ${leerling}
+- Aanwezigen: ${aanwezigen}
+
+TRANSCRIPTIE:
+${transcript}
+
+Geef het verslag in dit formaat:
+
+VERSLAG ${typeLabel.toUpperCase()}
+Datum: ${datum}
+Leerling: ${leerling}
+Aanwezigen: ${aanwezigen}
+
+SAMENVATTING
+[2-4 zinnen die het gesprek samenvatten]
+
+ACTIEPUNTEN
+• [actiepunt 1]
+• [actiepunt 2]
+• [etc.]
+
+OVERIGE OPMERKINGEN
+[Eventuele relevante notities die niet in de samenvatting passen. Laat weg als niet van toepassing.]
+
+Ondertekend: _________________________ Datum: _____________`;
+
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 1500,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+
+    const data = await response.json();
+    const verslag = data.content[0].text;
+
+    // Render verslag
+    const box = document.getElementById('verslag-box');
+    box.innerHTML = '';
+    const lines = verslag.split('\n');
+    let html = '';
+    for (const line of lines) {
+      if (line.startsWith('VERSLAG') || line.startsWith('SAMENVATTING') || line.startsWith('ACTIEPUNTEN') || line.startsWith('OVERIGE')) {
+        html += `<h3>${line}</h3>`;
+      } else if (line.startsWith('•')) {
+        html += `<p style="padding-left:1rem">${line}</p>`;
+      } else if (line.trim()) {
+        html += `<p>${line}</p>`;
+      } else {
+        html += '<br>';
+      }
+    }
+    box.innerHTML = html;
+
+    // Sla op voor download
+    box.dataset.raw = verslag;
+    document.getElementById('download-btn').disabled = false;
+    document.getElementById('copy-btn').disabled = false;
+    showToast('✅ Verslag klaar!');
+  } catch (e) {
+    showToast('❌ Fout bij verslag genereren: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '📋 Maak verslag';
+  }
+}
+
+// ─────────────────────────────────────────────
+// DOWNLOAD / KOPIËREN
+// ─────────────────────────────────────────────
+function downloadVerslag() {
+  const raw = document.getElementById('verslag-box').dataset.raw;
+  if (!raw) return;
+  const leerling = document.getElementById('leerling-naam').value.replace(/\s+/g, '_') || 'leerling';
+  const datum = document.getElementById('gesprek-datum').value;
+  const blob = new Blob([raw], { type: 'text/plain;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `verslag_${leerling}_${datum}.txt`;
+  a.click();
+  showToast('📥 Verslag gedownload!');
+}
+
+function copyVerslag() {
+  const raw = document.getElementById('verslag-box').dataset.raw;
+  if (!raw) return;
+  navigator.clipboard.writeText(raw).then(() => showToast('📋 Gekopieerd!'));
+}
+
+// ─────────────────────────────────────────────
+// ALLES WISSEN
+// ─────────────────────────────────────────────
+function clearAll() {
+  audioBlob = null; audioChunks = []; transcript = '';
+  document.getElementById('audio-preview').classList.remove('visible');
+  document.getElementById('audio-preview').src = '';
+  document.getElementById('transcript-box').textContent = 'Nog geen transcriptie. Neem eerst een gesprek op.';
+  document.getElementById('transcript-box').className = 'transcript-box';
+  document.getElementById('transcript-box').contentEditable = 'false';
+  document.getElementById('verslag-box').innerHTML = '<span class="placeholder">Verslag verschijnt hier na transcriptie.</span>';
+  document.getElementById('timer-display').textContent = '0:00';
+  document.getElementById('transcribe-btn').disabled = true;
+  document.getElementById('verslag-btn').disabled = true;
+  document.getElementById('download-btn').disabled = true;
+  document.getElementById('copy-btn').disabled = true;
+  showToast('🗑️ Alles gewist');
+}
+
+// ─────────────────────────────────────────────
+// TOAST
+// ─────────────────────────────────────────────
+let toastTimer = null;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+// ─────────────────────────────────────────────
+// TELEFOON APP
+// ─────────────────────────────────────────────
+let phoneMediaRecorder = null;
+let phoneChunks = [];
+let phoneBlob = null;
+let phoneIsRecording = false;
+let phoneTimerInterval = null;
+let phoneSeconds = 0;
+let phonePeer = null;
+let phoneConn = null;
+
+function phoneConnect() {
+  const targetId = document.getElementById('phone-peer-input').value.trim();
+  if (!targetId) { document.getElementById('phone-conn-status').textContent = 'Vul een verbindingscode in'; return; }
+
+  document.getElementById('phone-conn-status').textContent = 'Verbinden...';
+  phonePeer = new Peer({ debug: 0 });
+  phonePeer.on('open', id => {
+    phoneConn = phonePeer.connect(targetId);
+    phoneConn.on('open', () => {
+      document.getElementById('phone-conn-status').textContent = '✅ Verbonden met computer!';
+      document.getElementById('phone-rec-btn').disabled = false;
+      document.getElementById('phone-status-msg').textContent = 'Klaar voor opname';
+      document.getElementById('phone-status-msg').className = 'phone-status-msg active';
+    });
+    phoneConn.on('error', () => {
+      document.getElementById('phone-conn-status').textContent = '❌ Verbinding mislukt';
+    });
+  });
+  phonePeer.on('error', () => {
+    document.getElementById('phone-conn-status').textContent = '❌ Peer fout';
+  });
+}
+
+// Haal peer ID uit URL hash
+window.addEventListener('load', () => {
+  if (isPhone) {
+    const params = new URLSearchParams(location.hash.replace('#telefoon?', ''));
+    const peerId = params.get('peer');
+    if (peerId) {
+      document.getElementById('phone-peer-input').value = peerId;
+      phoneConnect();
+    }
+  }
+});
+
+async function phoneToggleRecord() {
+  if (!phoneIsRecording) await phoneStartRecord();
+  else phoneStopRecord();
+}
+
+async function phoneStartRecord() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    phoneChunks = [];
+    const mimeType = getSupportedMimeType();
+    phoneMediaRecorder = new MediaRecorder(stream, { mimeType });
+    phoneMediaRecorder.ondataavailable = e => { if (e.data.size > 0) phoneChunks.push(e.data); };
+    phoneMediaRecorder.onstop = () => {
+      phoneBlob = new Blob(phoneChunks, { type: mimeType });
+      stream.getTracks().forEach(t => t.stop());
+      document.getElementById('phone-send-btn').classList.add('visible');
+      document.getElementById('phone-status-msg').textContent = 'Opname klaar — verstuur naar computer';
+    };
+    phoneMediaRecorder.start(1000);
+    phoneIsRecording = true;
+    phoneSeconds = 0;
+    phoneTimerInterval = setInterval(() => {
+      phoneSeconds++;
+      document.getElementById('phone-timer-display').textContent = formatTime(phoneSeconds);
+    }, 1000);
+    const btn = document.getElementById('phone-rec-btn');
+    btn.className = 'phone-record-btn recording';
+    btn.textContent = '⏹';
+    document.getElementById('phone-status-msg').textContent = 'Opname bezig...';
+  } catch (e) {
+    document.getElementById('phone-status-msg').textContent = 'Microfoon toegang geweigerd';
+  }
+}
+
+function phoneStopRecord() {
+  if (phoneMediaRecorder) phoneMediaRecorder.stop();
+  phoneIsRecording = false;
+  clearInterval(phoneTimerInterval);
+  const btn = document.getElementById('phone-rec-btn');
+  btn.className = 'phone-record-btn idle';
+  btn.textContent = '🎙️';
+}
+
+async function phoneSend() {
+  if (!phoneBlob || !phoneConn) return;
+  document.getElementById('phone-send-btn').textContent = '⏳ Versturen...';
+  const arrayBuffer = await phoneBlob.arrayBuffer();
+  phoneConn.send({ type: 'audio', buffer: arrayBuffer });
+  document.getElementById('phone-send-btn').textContent = '✅ Verstuurd!';
+  setTimeout(() => {
+    document.getElementById('phone-send-btn').textContent = '📤 Verstuur naar computer';
+  }, 3000);
+}
+</script>
+</body>
+</html>
