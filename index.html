@@ -735,11 +735,10 @@ async function startRecord() {
     document.getElementById('transcript-box').className = 'transcript-box has-content';
 
   } catch (e) {
-    let msg = '❌ Microfoon niet beschikbaar';
-    if (e.name === 'NotAllowedError') msg = '❌ Microfoon toegang geweigerd — sta toegang toe in Chrome';
-    else if (e.name === 'NotFoundError') msg = '❌ Geen microfoon gevonden';
+    const msg = '❌ ' + (e.name || 'Fout') + ': ' + (e.message || 'onbekend');
     showToast(msg);
     document.getElementById('record-status').textContent = msg;
+    console.error('Microfoon fout:', e.name, e.message, e);
   }
 }
 
