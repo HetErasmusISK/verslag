@@ -805,33 +805,67 @@ async function generateVerslag() {
 }
 
 function generateVerslagTemplate(typeLabel, datum, leerling, aanwezigen) {
-  // Splits transcript in zinnen voor samenvatting
-  const zinnen = transcript.split(/[.!?]+/).map(z => z.trim()).filter(z => z.length > 15);
-  const samenvatting = zinnen.slice(0, 3).join('. ') + (zinnen.length > 0 ? '.' : '');
+  const zinnen = transcript.split(/[.!?]+/).map(z => z.trim()).filter(z => z.length > 10);
 
-  // Zoek actiepunten (zinnen met trefwoorden)
-  const actiewoorden = ['gaat', 'moet', 'zal', 'afspraak', 'volgende keer', 'contact', 'regelen', 'zorgen', 'meenemen', 'inleveren', 'proberen'];
+  // Actiepunten detecteren op trefwoorden
+  const actiewoorden = [
+    'gaat', 'moet', 'zal', 'gaan', 'afspraak', 'volgende keer', 'contact',
+    'regelen', 'zorgen', 'meenemen', 'inleveren', 'proberen', 'bellen',
+    'mailen', 'sturen', 'bespreken', 'kijken naar', 'oppakken', 'aanmelden',
+    'aanpassen', 'nakijken', 'doorgeven', 'plannen', 'herhalen', 'oefenen'
+  ];
   const actiepunten = zinnen.filter(z =>
     actiewoorden.some(w => z.toLowerCase().includes(w))
-  ).slice(0, 4);
+  ).slice(0, 5);
 
-  const verslagTekst = `VERSLAG ${typeLabel.toUpperCase()}
+  // Afspraken detecteren
+  const afspraakwoorden = ['afgesproken', 'afspraak', 'volgende', 'datum', 'week', 'maand', 'terugkomen', 'terugbellen'];
+  const afspraken = zinnen.filter(z =>
+    afspraakwoorden.some(w => z.toLowerCase().includes(w)) &&
+    !actiepunten.includes(z)
+  ).slice(0, 3);
+
+  // Samenvatting: eerste + middelste + laatste betekenisvolle zin
+  let samenvattingZinnen = [];
+  if (zinnen.length > 0) samenvattingZinnen.push(zinnen[0]);
+  if (zinnen.length > 4) samenvattingZinnen.push(zinnen[Math.floor(zinnen.length / 2)]);
+  if (zinnen.length > 1) samenvattingZinnen.push(zinnen[zinnen.length - 1]);
+  const samenvatting = [...new Set(samenvattingZinnen)].join('. ') + '.';
+
+  const verslagTekst =
+`VERSLAG ${typeLabel.toUpperCase()}
 Datum: ${datum}
 Leerling: ${leerling}
 Aanwezigen: ${aanwezigen}
 
+─────────────────────────────────
+VOLLEDIG TRANSCRIPT
+─────────────────────────────────
+${transcript.trim()}
+
+─────────────────────────────────
 SAMENVATTING
-${samenvatting || 'Zie transcriptie voor details van het gesprek.'}
+─────────────────────────────────
+${samenvatting}
 
+─────────────────────────────────
 ACTIEPUNTEN
+─────────────────────────────────
 ${actiepunten.length > 0
-  ? actiepunten.map(a => `• ${a}.`).join('\n')
-  : '• Geen specifieke actiepunten gevonden — controleer de transcriptie.'}
+  ? actiepunten.map(a => `• ${a.trim()}.`).join('\n')
+  : '• Geen specifieke actiepunten herkend — controleer het transcript.'}
 
-OVERIGE OPMERKINGEN
-—
+─────────────────────────────────
+AFSPRAKEN
+─────────────────────────────────
+${afspraken.length > 0
+  ? afspraken.map(a => `• ${a.trim()}.`).join('\n')
+  : '• Geen specifieke afspraken herkend.'}
 
-Ondertekend: _________________________ Datum: _____________`;
+─────────────────────────────────
+Ondertekend: _________________________
+
+Datum: _____________`;
 
   renderVerslag(verslagTekst);
   showToast('✅ Verslag klaar! Controleer en pas aan waar nodig.');
@@ -888,12 +922,14 @@ function renderVerslag(verslagTekst) {
   const lines = verslagTekst.split('\n');
   let html = '';
   for (const line of lines) {
-    if (line.startsWith('VERSLAG') || line.startsWith('SAMENVATTING') || line.startsWith('ACTIEPUNTEN') || line.startsWith('OVERIGE')) {
+    if (line.startsWith('VERSLAG') || line.startsWith('SAMENVATTING') || line.startsWith('ACTIEPUNTEN') || line.startsWith('AFSPRAKEN') || line.startsWith('VOLLEDIG') || line.startsWith('OVERIGE')) {
       html += `<h3>${line}</h3>`;
+    } else if (line.startsWith('─')) {
+      html += `<hr style="border:none;border-top:1px solid var(--border);margin:0.3rem 0;">`;
     } else if (line.startsWith('•')) {
-      html += `<p style="padding-left:1rem">${line}</p>`;
+      html += `<p style="padding-left:1rem;margin:0.2rem 0;">${line}</p>`;
     } else if (line.trim()) {
-      html += `<p>${line}</p>`;
+      html += `<p style="margin:0.2rem 0;">${line}</p>`;
     } else {
       html += '<br>';
     }
