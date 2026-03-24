@@ -553,12 +553,7 @@ function initComputerApp() {
   // Datum invullen
   document.getElementById('gesprek-datum').value = new Date().toISOString().split('T')[0];
 
-  // API key opslaan/laden
-  const savedKey = localStorage.getItem('anthropic_key');
-  if (savedKey) document.getElementById('api-key').value = savedKey;
-  document.getElementById('api-key').addEventListener('change', () => {
-    localStorage.setItem('anthropic_key', document.getElementById('api-key').value);
-  });
+  // API key (niet meer in gebruik — gratis via Web Speech API)
 
   // Peer.js apart laden — fouten mogen de rest NIET blokkeren
   setTimeout(() => {
