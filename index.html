@@ -522,14 +522,6 @@
 // ─────────────────────────────────────────────
 // DETECTEER MODE (telefoon of computer)
 // ─────────────────────────────────────────────
-const isPhone = location.hash === '#telefoon';
-if (isPhone) {
-  document.getElementById('phone-view').style.display = 'flex';
-  document.getElementById('computer-view').style.display = 'none';
-} else {
-  initComputerApp();
-}
-
 // ─────────────────────────────────────────────
 // STATE
 // ─────────────────────────────────────────────
@@ -542,6 +534,17 @@ let seconds = 0;
 let transcript = '';
 let peer = null;
 let peerConn = null;
+
+// ─────────────────────────────────────────────
+// DETECTEER MODE (telefoon of computer)
+// ─────────────────────────────────────────────
+const isPhone = location.hash === '#telefoon';
+if (isPhone) {
+  document.getElementById('phone-view').style.display = 'flex';
+  document.getElementById('computer-view').style.display = 'none';
+} else {
+  initComputerApp();
+}
 
 // ─────────────────────────────────────────────
 // COMPUTER APP INIT
